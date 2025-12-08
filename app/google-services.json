@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "711969790668",
+    "project_id": "waypointapp-cda62",
+    "storage_bucket": "waypointapp-cda62.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:711969790668:android:93053732249f5069418069",
+        "android_client_info": {
+          "package_name": "com.example.waypoint"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCXZb5jvIah0GAzSoy8GLitfkxoUd9Oa0M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:711969790668:android:b240aa462cdd5027418069",
+        "android_client_info": {
+          "package_name": "com.example.waypointv2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCXZb5jvIah0GAzSoy8GLitfkxoUd9Oa0M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
