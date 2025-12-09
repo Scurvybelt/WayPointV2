@@ -5,12 +5,12 @@ import java.util.Date
 
 data class Waypoint(
     val id: String = "",
-    val title: String = "Waypoint", // Título por defecto
-    val photoUrl: String? = null,
-    val audioUrl: String? = null,
+    val userId: String = "",
+    val photoUrl: String = "",
+    val audioUrl: String = "",
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
+    val locationName: String = "",
     @ServerTimestamp
-    val createdAt: Date? = null,
-    val userId: String = ""
+    val timestamp: Date? = null
 )
