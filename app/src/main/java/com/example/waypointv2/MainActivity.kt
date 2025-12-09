@@ -21,6 +21,7 @@ import com.example.waypointv2.ui.auth.RegisterScreen
 import com.example.waypointv2.ui.home.HomeViewModel
 import com.example.waypointv2.ui.home.MainScreen
 import com.example.waypointv2.ui.theme.WayPointV2Theme
+import com.example.waypointv2.ui.waypoint.CreateWaypointScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -80,9 +81,12 @@ fun WaypointApp(authViewModel: AuthViewModel) {
             val homeViewModel: HomeViewModel = viewModel()
             MainScreen(
                 homeViewModel = homeViewModel,
-                onFabClick = { /* Acción para el FAB - Paso 4 */ },
+                onFabClick = { navController.navigate("create_waypoint") },
                 onLogoutClick = { authViewModel.logout() }
             )
+        }
+        composable("create_waypoint") {
+            CreateWaypointScreen(onBackClick = { navController.popBackStack() })
         }
     }
     
