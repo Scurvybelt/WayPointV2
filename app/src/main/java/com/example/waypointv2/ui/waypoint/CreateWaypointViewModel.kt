@@ -52,6 +52,10 @@ class CreateWaypointViewModel(application: Application) : AndroidViewModel(appli
     private val _recordingDuration = MutableStateFlow(0L)
     val recordingDuration = _recordingDuration.asStateFlow()
     
+    // Título de la nota
+    private val _title = MutableStateFlow("")
+    val title = _title.asStateFlow()
+    
     // Job para actualizar el contador de duración
     private var durationJob: Job? = null
     
@@ -109,6 +113,13 @@ class CreateWaypointViewModel(application: Application) : AndroidViewModel(appli
         } else {
             _captureState.value = CaptureState.Error("Error al detener la grabación de audio")
         }
+    }
+    
+    /**
+     * Actualiza el título de la nota
+     */
+    fun updateTitle(newTitle: String) {
+        _title.value = newTitle
     }
     
     /**
@@ -195,6 +206,7 @@ class CreateWaypointViewModel(application: Application) : AndroidViewModel(appli
                     latitude = location.latitude,
                     longitude = location.longitude,
                     locationName = locationName,
+                    title = _title.value,
                     timestamp = Date()
                 )
                 
@@ -243,6 +255,7 @@ class CreateWaypointViewModel(application: Application) : AndroidViewModel(appli
         _captureState.value = CaptureState.Idle
         _photoUri.value = null
         _recordingDuration.value = 0
+        _title.value = ""
         audioFile = null
     }
     

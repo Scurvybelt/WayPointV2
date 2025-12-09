@@ -10,16 +10,26 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Scaffold
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.waypointv2.ui.auth.AuthViewModel
 import com.example.waypointv2.ui.auth.LoginScreen
 import com.example.waypointv2.ui.auth.RegisterScreen
 import com.example.waypointv2.ui.home.HomeViewModel
 import com.example.waypointv2.ui.home.MainScreen
+import com.example.waypointv2.ui.home.Waypoint
+import com.example.waypointv2.ui.home.WaypointDetailScreen
+import com.example.waypointv2.ui.map.WaypointsMapScreen
+import com.example.waypointv2.ui.navigation.BottomNavigationBar
+import com.example.waypointv2.ui.profile.ProfileScreen
 import com.example.waypointv2.ui.theme.WayPointV2Theme
 import com.example.waypointv2.ui.waypoint.CreateWaypointScreen
 
@@ -53,40 +63,81 @@ fun WaypointApp(authViewModel: AuthViewModel) {
         }
     }
 
-    NavHost(
-        navController = navController,
-        startDestination = if (isLoggedIn) "main" else "login"
-    ) {
-        composable("login") {
-            LoginScreen(
-                onLoginClick = { email, password ->
-                    authViewModel.login(email, password)
-                },
-                onNavigateToRegister = {
-                    navController.navigate("register")
+    Scaffold(
+        bottomBar = {
+            BottomNavigationBar(navController = navController)
+        }
+    ) { innerPadding ->
+        NavHost(
+            navController = navController,
+            startDestination = if (isLoggedIn) "main" else "login",
+            modifier = Modifier.padding(innerPadding)
+        ) {
+            composable("login") {
+                LoginScreen(
+                    onLoginClick = { email, password ->
+                        authViewModel.login(email, password)
+                    },
+                    onNavigateToRegister = {
+                        navController.navigate("register")
+                    }
+                )
+            }
+            composable("register") {
+                RegisterScreen(
+                    onRegisterClick = { email, password ->
+                        authViewModel.register(email, password)
+                    },
+                    onNavigateToLogin = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+            composable("main") {
+                val homeViewModel: HomeViewModel = viewModel()
+                MainScreen(
+                    homeViewModel = homeViewModel,
+                    onFabClick = { navController.navigate("create_waypoint") },
+                    onLogoutClick = { authViewModel.logout() },
+                    onWaypointClick = { waypoint ->
+                        // Pasar el ID del waypoint como argumento
+                        navController.navigate("waypoint_detail/${waypoint.id}")
+                    },
+                    onMapClick = { navController.navigate("waypoints_map") }
+                )
+            }
+            composable("create_waypoint") {
+                CreateWaypointScreen(onBackClick = { navController.navigate("main") })
+            }
+            composable("profile") {
+                ProfileScreen(
+                    authViewModel = authViewModel,
+                    onLogoutClick = { authViewModel.logout() }
+                )
+            }
+            composable("waypoints_map") {
+                WaypointsMapScreen(
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = "waypoint_detail/{waypointId}",
+                arguments = listOf(navArgument("waypointId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val waypointId = backStackEntry.arguments?.getString("waypointId") ?: ""
+                val homeViewModel: HomeViewModel = viewModel()
+                val waypoints by homeViewModel.waypoints.collectAsState()
+                
+                // Buscar el waypoint por ID
+                val waypoint = waypoints.find { it.id == waypointId }
+                
+                if (waypoint != null) {
+                    WaypointDetailScreen(
+                        waypoint = waypoint,
+                        onBackClick = { navController.popBackStack() }
+                    )
                 }
-            )
-        }
-        composable("register") {
-            RegisterScreen(
-                onRegisterClick = { email, password ->
-                    authViewModel.register(email, password)
-                },
-                onNavigateToLogin = {
-                    navController.popBackStack()
-                }
-            )
-        }
-        composable("main") {
-            val homeViewModel: HomeViewModel = viewModel()
-            MainScreen(
-                homeViewModel = homeViewModel,
-                onFabClick = { navController.navigate("create_waypoint") },
-                onLogoutClick = { authViewModel.logout() }
-            )
-        }
-        composable("create_waypoint") {
-            CreateWaypointScreen(onBackClick = { navController.popBackStack() })
+            }
         }
     }
     

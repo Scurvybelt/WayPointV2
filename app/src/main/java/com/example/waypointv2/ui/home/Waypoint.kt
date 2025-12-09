@@ -11,6 +11,7 @@ data class Waypoint(
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
     val locationName: String = "",
+    val title: String = "",
     @ServerTimestamp
     val timestamp: Date? = null
 )

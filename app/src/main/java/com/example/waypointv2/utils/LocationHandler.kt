@@ -80,32 +80,46 @@ class LocationHandler(private val context: Context) {
      * Construye un nombre legible de la ubicación
      */
     private fun buildLocationName(address: Address): String {
-        return when {
-            // Si hay nombre de lugar específico (ej: "Starbucks")
-            address.featureName != null && address.featureName != address.thoroughfare -> {
-                address.featureName
-            }
-            // Si hay calle y ciudad
-            address.thoroughfare != null && address.locality != null -> {
-                "${address.thoroughfare}, ${address.locality}"
-            }
-            // Si solo hay ciudad
-            address.locality != null -> {
-                address.locality
-            }
-            // Si solo hay estado/provincia
-            address.adminArea != null -> {
-                address.adminArea
-            }
-            // Fallback a país
-            address.countryName != null -> {
-                address.countryName
-            }
-            // Último recurso: coordenadas
-            else -> {
-                formatCoordinates(address.latitude, address.longitude)
+        val parts = mutableListOf<String>()
+        
+        // Agregar nombre de lugar específico si existe y no es solo un número
+        val featureName = address.featureName
+        if (featureName != null && featureName != address.thoroughfare) {
+            // Si el featureName es solo un número, combinarlo con la calle
+            if (featureName.matches(Regex("^\\d+$"))) {
+                // Es solo un número, lo ignoramos y usaremos la calle completa
+            } else {
+                parts.add(featureName)
             }
         }
+        
+        // Agregar calle (thoroughfare)
+        if (address.thoroughfare != null) {
+            parts.add(address.thoroughfare)
+        }
+        
+        // Agregar ciudad
+        if (address.locality != null) {
+            parts.add(address.locality)
+        }
+        
+        // Si tenemos al menos una parte, construir el nombre
+        if (parts.isNotEmpty()) {
+            return parts.joinToString(", ")
+        }
+        
+        // Si no hay partes útiles, intentar con estado/provincia
+        if (address.adminArea != null) {
+            return address.adminArea
+        }
+        
+        // Fallback a país
+        if (address.countryName != null) {
+            return address.countryName
+        }
+        
+        // Último recurso: coordenadas
+        return formatCoordinates(address.latitude, address.longitude)
     }
     
     /**

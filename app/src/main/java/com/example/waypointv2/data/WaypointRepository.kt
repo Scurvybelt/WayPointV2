@@ -110,7 +110,8 @@ class WaypointRepository {
                 "longitude" to waypoint.longitude,
                 "photoUrl" to waypoint.photoUrl,
                 "audioUrl" to waypoint.audioUrl,
-                "locationName" to waypoint.locationName
+                "locationName" to waypoint.locationName,
+                "title" to waypoint.title
             )
             
             val documentRef = firestore.collection("waypoints")
