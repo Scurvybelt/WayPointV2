@@ -30,7 +30,7 @@ import com.example.waypointv2.ui.home.WaypointDetailScreen
 import com.example.waypointv2.ui.map.WaypointsMapScreen
 import com.example.waypointv2.ui.navigation.BottomNavigationBar
 import com.example.waypointv2.ui.profile.ProfileScreen
-import com.example.waypointv2.ui.theme.WayPointV2Theme
+import com.example.waypointv2.ui.theme.WayPointTheme
 import com.example.waypointv2.ui.waypoint.CreateWaypointScreen
 
 class MainActivity : ComponentActivity() {
@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            WayPointV2Theme {
+            WayPointTheme {
                 WaypointApp(authViewModel)
             }
         }
@@ -116,8 +116,10 @@ fun WaypointApp(authViewModel: AuthViewModel) {
                 )
             }
             composable("waypoints_map") {
+                val homeViewModel: HomeViewModel = viewModel()
                 WaypointsMapScreen(
-                    onBackClick = { navController.popBackStack() }
+                    onBackClick = { navController.popBackStack() },
+                    homeViewModel = homeViewModel
                 )
             }
             composable(

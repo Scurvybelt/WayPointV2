@@ -24,11 +24,11 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.WayPointV2">
+        android:theme="@style/Theme.WayPoint">
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyD1ZRTkdjVYV4D3qML3pCoZvGNIAUsl3LI" />
+            android:value="AIzaSyCTUO94SGm5UlMGV_JQ9tDFTFK3PHToAOU" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -44,7 +44,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.WayPointV2">
+            android:theme="@style/Theme.WayPoint">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

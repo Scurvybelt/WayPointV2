@@ -28,7 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.waypointv2.ui.theme.WayPointV2Theme
+import com.example.waypointv2.ui.theme.WayPointTheme
 
 @Composable
 fun RegisterScreen(
@@ -174,7 +174,7 @@ fun RegisterScreen(
 @Preview(showBackground = true)
 @Composable
 fun RegisterScreenPreview() {
-    WayPointV2Theme {
+    WayPointTheme {
         RegisterScreen(onRegisterClick = { _, _ -> }, onNavigateToLogin = { })
     }
 }
