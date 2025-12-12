@@ -84,16 +84,54 @@ fun WaypointDetailScreen(
                 .background(Color.White)
                 .verticalScroll(rememberScrollState())
         ) {
-            // Imagen del waypoint
-            AsyncImage(
-                model = waypoint.photoUrl,
-                contentDescription = "Foto del waypoint",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(400.dp)
-                    .clip(RoundedCornerShape(0.dp)),
-                contentScale = ContentScale.Crop
-            )
+            // Foto trasera
+            Column(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Foto Trasera",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 16.sp,
+                        color = Color.Black,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+                )
+                AsyncImage(
+                    model = waypoint.photoUrl,
+                    contentDescription = "Foto trasera del waypoint",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(500.dp),
+                    contentScale = ContentScale.Fit
+                )
+            }
+            
+            // Foto frontal
+            if (waypoint.frontPhotoUrl.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(24.dp))
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Foto Frontal",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 16.sp,
+                            color = Color.Black,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+                    )
+                    AsyncImage(
+                        model = waypoint.frontPhotoUrl,
+                        contentDescription = "Foto frontal del waypoint",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(500.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+            }
             
             // Información del waypoint
             Column(

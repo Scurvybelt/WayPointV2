@@ -1,20 +1,30 @@
 package com.example.waypointv2.ui.waypoint
 
 import android.Manifest
+import android.content.Intent
 import android.net.Uri
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,7 +53,8 @@ fun CreateWaypointScreen(
 ) {
     val context = LocalContext.current
     val captureState by viewModel.captureState.collectAsState()
-    val photoUri by viewModel.photoUri.collectAsState()
+    val backPhotoUri by viewModel.backPhotoUri.collectAsState()
+    val frontPhotoUri by viewModel.frontPhotoUri.collectAsState()
     val recordingDuration by viewModel.recordingDuration.collectAsState()
     
     // Permisos necesarios
@@ -55,24 +66,66 @@ fun CreateWaypointScreen(
         )
     )
     
-    // Launcher para la cámara
-    val photoFile = remember {
-        File(context.cacheDir, "photo_${System.currentTimeMillis()}.jpg")
+    // Archivos para las fotos
+    val backPhotoFile = remember {
+        File(context.cacheDir, "back_photo_${System.currentTimeMillis()}.jpg")
     }
     
-    val photoUriForCamera = remember {
+    val frontPhotoFile = remember {
+        File(context.cacheDir, "front_photo_${System.currentTimeMillis()}.jpg")
+    }
+    
+    val backPhotoUriForCamera = remember {
         FileProvider.getUriForFile(
             context,
             "${context.packageName}.fileprovider",
-            photoFile
+            backPhotoFile
         )
     }
     
-    val cameraLauncher = rememberLauncherForActivityResult(
+    val frontPhotoUriForCamera = remember {
+        FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            frontPhotoFile
+        )
+    }
+    
+    // Launcher para la cámara trasera
+    val backCameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success) {
-            viewModel.onPhotoTaken(photoUriForCamera)
+            viewModel.onBackPhotoTaken(backPhotoUriForCamera)
+        } else {
+            viewModel.onPhotoCancelled()
+            onBackClick()
+        }
+    }
+    
+    // Launcher para la cámara frontal usando Intent personalizado
+    val frontCameraLauncher = rememberLauncherForActivityResult(
+        contract = object : ActivityResultContract<Uri, Boolean>() {
+            override fun createIntent(context: android.content.Context, input: Uri): Intent {
+                val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+                    putExtra(MediaStore.EXTRA_OUTPUT, input)
+                    // Intentar especificar cámara frontal
+                    // Nota: Esto puede no funcionar en todos los dispositivos
+                    // Algunos dispositivos ignoran este parámetro
+                    putExtra("android.intent.extras.CAMERA_FACING", 1) // 1 = frontal
+                    addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                return intent
+            }
+            
+            override fun parseResult(resultCode: Int, intent: Intent?): Boolean {
+                return resultCode == android.app.Activity.RESULT_OK
+            }
+        }
+    ) { success ->
+        if (success) {
+            viewModel.onFrontPhotoTaken(frontPhotoUriForCamera)
         } else {
             viewModel.onPhotoCancelled()
             onBackClick()
@@ -87,12 +140,17 @@ fun CreateWaypointScreen(
         }
     }
     
-    // Efecto para lanzar la cámara cuando el estado es CapturingPhoto
+    // Efecto para lanzar la cámara según el estado
     LaunchedEffect(captureState) {
         when (captureState) {
-            is CaptureState.CapturingPhoto -> {
+            is CaptureState.CapturingBackPhoto -> {
                 if (permissionsState.allPermissionsGranted) {
-                    cameraLauncher.launch(photoUriForCamera)
+                    backCameraLauncher.launch(backPhotoUriForCamera)
+                }
+            }
+            is CaptureState.CapturingFrontPhoto -> {
+                if (permissionsState.allPermissionsGranted) {
+                    frontCameraLauncher.launch(frontPhotoUriForCamera)
                 }
             }
             is CaptureState.Success -> {
@@ -113,11 +171,18 @@ fun CreateWaypointScreen(
             // Mostrar UI según el estado
             when (val state = captureState) {
                 is CaptureState.RecordingAudio -> {
+                    val availableTags by viewModel.availableTags.collectAsState()
+                    val currentTags by viewModel.tags.collectAsState()
                     AudioRecordingScreen(
-                        photoUri = photoUri,
+                        backPhotoUri = backPhotoUri,
+                        frontPhotoUri = frontPhotoUri,
                         recordingDuration = recordingDuration,
                         title = viewModel.title.value,
                         onTitleChange = { viewModel.updateTitle(it) },
+                        tags = currentTags,
+                        availableTags = availableTags,
+                        onAddTag = { viewModel.addTag(it) },
+                        onRemoveTag = { viewModel.removeTag(it) },
                         onStartRecording = { viewModel.startAudioRecording() },
                         onStopRecording = { viewModel.stopAudioRecording() },
                         onCancel = {
@@ -265,26 +330,36 @@ fun PermissionItem(icon: String, title: String, description: String) {
 
 @Composable
 fun AudioRecordingScreen(
-    photoUri: Uri?,
+    backPhotoUri: Uri?,
+    frontPhotoUri: Uri?,
     recordingDuration: Long,
     title: String,
     onTitleChange: (String) -> Unit,
+    tags: List<String>,
+    availableTags: List<String>,
+    onAddTag: (String) -> Unit,
+    onRemoveTag: (String) -> Unit,
     onStartRecording: () -> Unit,
     onStopRecording: () -> Unit,
     onCancel: () -> Unit
 ) {
     var isRecording by remember { mutableStateOf(false) }
     var localTitle by remember { mutableStateOf(title) }
+    var tagInput by remember { mutableStateOf("") }
+    var showTagInput by remember { mutableStateOf(false) }
     
     // Sincronizar el título local con el del ViewModel
     LaunchedEffect(title) {
         localTitle = title
     }
     
+    val scrollState = rememberScrollState()
+    
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.9f))
+            .verticalScroll(scrollState)
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -304,26 +379,79 @@ fun AudioRecordingScreen(
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Preview de la foto
-            photoUri?.let { uri ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(300.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color.White
-                    ),
-                    elevation = CardDefaults.cardElevation(
-                        defaultElevation = 0.dp
-                    )
-                ) {
-                    Image(
-                        painter = rememberAsyncImagePainter(uri),
-                        contentDescription = "Foto capturada",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
+            // Preview de las fotos (trasera y frontal)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Foto trasera
+                backPhotoUri?.let { uri ->
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(200.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color.White
+                        ),
+                        elevation = CardDefaults.cardElevation(
+                            defaultElevation = 0.dp
+                        )
+                    ) {
+                        Column {
+                            Text(
+                                text = "Trasera",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 10.sp,
+                                    color = Color.Gray
+                                ),
+                                modifier = Modifier.padding(8.dp)
+                            )
+                            Image(
+                                painter = rememberAsyncImagePainter(uri),
+                                contentDescription = "Foto trasera",
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+                    }
+                }
+                
+                // Foto frontal
+                frontPhotoUri?.let { uri ->
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(200.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color.White
+                        ),
+                        elevation = CardDefaults.cardElevation(
+                            defaultElevation = 0.dp
+                        )
+                    ) {
+                        Column {
+                            Text(
+                                text = "Frontal",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 10.sp,
+                                    color = Color.Gray
+                                ),
+                                modifier = Modifier.padding(8.dp)
+                            )
+                            Image(
+                                painter = rememberAsyncImagePainter(uri),
+                                contentDescription = "Foto frontal",
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+                    }
                 }
             }
             
@@ -369,6 +497,215 @@ fun AudioRecordingScreen(
                 singleLine = true
             )
             
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Campo de etiquetas
+            Column(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Título con icono para crear nueva etiqueta
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Etiquetas",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 14.sp,
+                            color = Color.Gray,
+                            fontWeight = FontWeight.Medium
+                        )
+                    )
+                    IconButton(
+                        onClick = { showTagInput = !showTagInput },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (showTagInput) Icons.Default.Close else Icons.Default.Add,
+                            contentDescription = if (showTagInput) "Cerrar" else "Crear nueva etiqueta",
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Mostrar etiquetas disponibles para seleccionar
+                val unselectedTags = availableTags.filter { availableTag ->
+                    !tags.any { selectedTag -> 
+                        selectedTag.equals(availableTag, ignoreCase = true) 
+                    }
+                }
+                
+                // Debug: mostrar información
+                LaunchedEffect(availableTags.size, tags.size) {
+                    android.util.Log.d("CreateWaypointScreen", "Etiquetas disponibles: $availableTags")
+                    android.util.Log.d("CreateWaypointScreen", "Etiquetas seleccionadas: $tags")
+                    android.util.Log.d("CreateWaypointScreen", "Etiquetas no seleccionadas: $unselectedTags")
+                }
+                
+                if (unselectedTags.isNotEmpty()) {
+                    Text(
+                        text = "Etiquetas disponibles (${unselectedTags.size})",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 12.sp,
+                            color = Color.Gray.copy(alpha = 0.8f)
+                        ),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(
+                            items = unselectedTags,
+                            key = { tag -> tag }
+                        ) { tag ->
+                            Button(
+                                onClick = { 
+                                    android.util.Log.d("CreateWaypointScreen", "Click en etiqueta: $tag")
+                                    onAddTag(tag)
+                                },
+                                modifier = Modifier.height(32.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.White.copy(alpha = 0.2f),
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(16.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "Agregar",
+                                    modifier = Modifier.size(14.dp),
+                                    tint = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    tag,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 12.sp,
+                                        color = Color.White
+                                    )
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                } else if (availableTags.isNotEmpty()) {
+                    // Todas las etiquetas están seleccionadas
+                    Text(
+                        text = "Todas las etiquetas disponibles están seleccionadas",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 12.sp,
+                            color = Color.Gray.copy(alpha = 0.6f)
+                        ),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+                
+                // Campo de texto para agregar nuevas etiquetas (solo visible si se activa)
+                if (showTagInput) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextField(
+                            value = tagInput,
+                            onValueChange = { tagInput = it },
+                            placeholder = {
+                                Text(
+                                    "Escribe una nueva etiqueta y presiona +",
+                                    color = Color.Gray.copy(alpha = 0.7f)
+                                )
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = TextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedIndicatorColor = Color.White,
+                                unfocusedIndicatorColor = Color.Gray.copy(alpha = 0.5f),
+                                cursorColor = Color.White,
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent
+                            ),
+                            shape = RoundedCornerShape(0.dp),
+                            singleLine = true
+                        )
+                        IconButton(
+                            onClick = {
+                                if (tagInput.isNotBlank()) {
+                                    onAddTag(tagInput)
+                                    tagInput = ""
+                                    showTagInput = false
+                                }
+                            },
+                            modifier = Modifier
+                                .background(
+                                    Color.White.copy(alpha = 0.2f),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Agregar etiqueta",
+                                tint = Color.White
+                            )
+                        }
+                    }
+                }
+                
+                // Mostrar etiquetas seleccionadas
+                if (tags.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Etiquetas seleccionadas",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 12.sp,
+                            color = Color.Gray.copy(alpha = 0.8f)
+                        ),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(
+                            items = tags,
+                            key = { tag -> tag }
+                        ) { tag ->
+                            AssistChip(
+                                onClick = { onRemoveTag(tag) },
+                                label = {
+                                    Text(
+                                        tag,
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontSize = 12.sp,
+                                            color = Color.White
+                                        )
+                                    )
+                                },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Eliminar",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = Color.White
+                                    )
+                                },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = Color.White.copy(alpha = 0.2f),
+                                    labelColor = Color.White
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+            
             Spacer(modifier = Modifier.height(24.dp))
             
             // Indicador de grabación
@@ -398,7 +735,7 @@ fun AudioRecordingScreen(
                 }
             }
             
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(32.dp))
             
             // Botón de grabar/detener
             FloatingActionButton(

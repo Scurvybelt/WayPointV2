@@ -10,11 +10,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -24,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Place
@@ -43,6 +46,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.TextButton
@@ -64,6 +69,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -98,13 +104,19 @@ fun MainScreen(
     var searchText by remember { mutableStateOf("") }
     var filterDate by remember { mutableStateOf<Date?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var selectedTags by remember { mutableStateOf<Set<String>>(emptySet()) }
     
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = filterDate?.time
     )
     
+    // Obtener todas las etiquetas únicas de los waypoints
+    val allTags = remember(waypoints) {
+        waypoints.flatMap { it.tags }.distinct().sorted()
+    }
+    
     // Filtrar waypoints
-    val filteredWaypoints = remember(waypoints, searchText, filterDate) {
+    val filteredWaypoints = remember(waypoints, searchText, filterDate, selectedTags) {
         waypoints.filter { waypoint ->
             // Filtro por nombre (título)
             val matchesSearch = searchText.isEmpty() || 
@@ -134,7 +146,14 @@ fun MainScreen(
                 } ?: false
             }
             
-            matchesSearch && matchesDate
+            // Filtro por etiquetas
+            val matchesTags = if (selectedTags.isEmpty()) {
+                true
+            } else {
+                waypoint.tags.any { it in selectedTags }
+            }
+            
+            matchesSearch && matchesDate && matchesTags
         }
     }
     
@@ -190,72 +209,89 @@ fun MainScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color.White)
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 // Campo de búsqueda y filtro por fecha en la misma fila
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Campo de búsqueda por nombre
                     TextField(
                         value = searchText,
-                        onValueChange = { searchText = it },
+                        onValueChange = { newValue -> searchText = newValue },
                         placeholder = {
                             Text(
-                                "Buscar por nombre o ubicación",
-                                color = Color.Gray.copy(alpha = 0.7f)
+                                "Buscar",
+                                color = Color.Gray.copy(alpha = 0.7f),
+                                fontSize = 14.sp
                             )
                         },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = "Buscar",
-                                tint = Color.Gray
+                                tint = Color.Gray,
+                                modifier = Modifier.size(18.dp)
                             )
                         },
                         trailingIcon = {
                             if (searchText.isNotEmpty()) {
-                                IconButton(onClick = { searchText = "" }) {
+                                IconButton(
+                                    onClick = { searchText = "" },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
                                     Icon(
                                         imageVector = Icons.Default.Clear,
                                         contentDescription = "Limpiar",
-                                        tint = Color.Gray
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                             }
                         },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .defaultMinSize(minWidth = 200.dp),
                         colors = TextFieldDefaults.colors(
-                            focusedTextColor = Color.Black,
-                            unfocusedTextColor = Color.Black,
+                            focusedTextColor = Color(0xFF000000),
+                            unfocusedTextColor = Color(0xFF000000),
                             focusedLabelColor = Color.Gray,
                             unfocusedLabelColor = Color.Gray,
                             focusedIndicatorColor = Color.Black,
                             unfocusedIndicatorColor = Color.Gray.copy(alpha = 0.3f),
                             cursorColor = Color.Black,
                             focusedContainerColor = Color.White,
-                            unfocusedContainerColor = Color.White
+                            unfocusedContainerColor = Color.White,
+                            disabledTextColor = Color.Black,
+                            disabledLabelColor = Color.Gray
                         ),
                         shape = RoundedCornerShape(8.dp),
-                        singleLine = true
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            fontSize = 14.sp,
+                            color = Color(0xFF000000),
+                            fontWeight = FontWeight.Normal
+                        )
                     )
                     
-                    // Icono de calendario
+                    // Icono de calendario (más compacto)
                     IconButton(
                         onClick = { showDatePicker = true },
                         modifier = Modifier
+                            .size(40.dp)
                             .background(
-                                color = if (filterDate != null) Color.Black else Color.Transparent,
+                                color = if (filterDate != null) Color.Black else Color.Gray.copy(alpha = 0.1f),
                                 shape = RoundedCornerShape(8.dp)
                             )
                     ) {
                         Icon(
                             imageVector = Icons.Default.DateRange,
                             contentDescription = "Seleccionar fecha",
-                            tint = if (filterDate != null) Color.White else Color.Black
+                            tint = if (filterDate != null) Color.White else Color.Black,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
@@ -263,81 +299,138 @@ fun MainScreen(
                 // Selector de vista (debajo del input de búsqueda)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     TextButton(
                         onClick = { viewType = ViewType.CARDS },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                         colors = ButtonDefaults.textButtonColors(
                             contentColor = if (viewType == ViewType.CARDS) Color.Black else Color.Gray.copy(alpha = 0.6f),
                             containerColor = if (viewType == ViewType.CARDS) Color.Gray.copy(alpha = 0.1f) else Color.Transparent
                         ),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(6.dp)
                     ) {
                         Text(
                             text = "Cards",
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             fontWeight = if (viewType == ViewType.CARDS) FontWeight.Medium else FontWeight.Normal
                         )
                     }
                     TextButton(
                         onClick = { viewType = ViewType.GRID },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                         colors = ButtonDefaults.textButtonColors(
                             contentColor = if (viewType == ViewType.GRID) Color.Black else Color.Gray.copy(alpha = 0.6f),
                             containerColor = if (viewType == ViewType.GRID) Color.Gray.copy(alpha = 0.1f) else Color.Transparent
                         ),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(6.dp)
                     ) {
                         Text(
                             text = "Grid",
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             fontWeight = if (viewType == ViewType.GRID) FontWeight.Medium else FontWeight.Normal
                         )
                     }
                     TextButton(
                         onClick = { viewType = ViewType.LIST },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                         colors = ButtonDefaults.textButtonColors(
                             contentColor = if (viewType == ViewType.LIST) Color.Black else Color.Gray.copy(alpha = 0.6f),
                             containerColor = if (viewType == ViewType.LIST) Color.Gray.copy(alpha = 0.1f) else Color.Transparent
                         ),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(6.dp)
                     ) {
                         Text(
                             text = "List",
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             fontWeight = if (viewType == ViewType.LIST) FontWeight.Medium else FontWeight.Normal
                         )
                     }
                 }
                 
-                // Mostrar fecha seleccionada como chip (debajo de los botones de vista)
-                if (filterDate != null) {
-                    AssistChip(
-                        onClick = { filterDate = null },
-                        label = {
-                            Text(
-                                dateFormatter.format(filterDate!!),
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontSize = 14.sp,
-                                    color = Color.Black
-                                )
+                // Mostrar fecha seleccionada y etiquetas
+                if (filterDate != null || allTags.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Mostrar fecha seleccionada como chip
+                        if (filterDate != null) {
+                            AssistChip(
+                                onClick = { filterDate = null },
+                                label = {
+                                    Text(
+                                        dateFormatter.format(filterDate!!),
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontSize = 11.sp,
+                                            color = Color.Black
+                                        )
+                                    )
+                                },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Clear,
+                                        contentDescription = "Limpiar",
+                                        modifier = Modifier.size(14.dp),
+                                        tint = Color.Black
+                                    )
+                                },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = Color.Gray.copy(alpha = 0.1f),
+                                    labelColor = Color.Black
+                                ),
+                                modifier = Modifier.height(28.dp)
                             )
-                        },
-                        trailingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Clear,
-                                contentDescription = "Limpiar",
-                                modifier = Modifier.size(18.dp),
-                                tint = Color.Black
-                            )
-                        },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = Color.Gray.copy(alpha = 0.1f),
-                            labelColor = Color.Black
-                        )
-                    )
+                        }
+                        
+                        // Mostrar etiquetas disponibles para filtrar
+                        if (allTags.isNotEmpty()) {
+                            LazyRow(
+                                modifier = if (filterDate != null) Modifier.weight(1f) else Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                items(allTags.size) { index ->
+                                    val tag = allTags[index]
+                                    val isSelected = tag in selectedTags
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = {
+                                            selectedTags = if (isSelected) {
+                                                selectedTags - tag
+                                            } else {
+                                                selectedTags + tag
+                                            }
+                                        },
+                                        label = {
+                                            Text(
+                                                tag,
+                                                style = MaterialTheme.typography.bodySmall.copy(
+                                                    fontSize = 11.sp
+                                                )
+                                            )
+                                        },
+                                        modifier = Modifier.height(28.dp),
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = Color.Black,
+                                            selectedLabelColor = Color.White,
+                                            containerColor = Color.Gray.copy(alpha = 0.1f),
+                                            labelColor = Color.Black
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
                 
                 // DatePicker Dialog
@@ -496,16 +589,33 @@ fun WaypointCard(
         )
     ) {
         Column {
-            // Imagen del waypoint
-            AsyncImage(
-                model = waypoint.photoUrl,
-                contentDescription = "Foto del waypoint",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(220.dp)
-                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
-                contentScale = ContentScale.Crop
-            )
+            // Imágenes del waypoint (trasera y frontal)
+            Row(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Foto trasera
+                AsyncImage(
+                    model = waypoint.photoUrl,
+                    contentDescription = "Foto trasera del waypoint",
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(220.dp)
+                        .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 0.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                // Foto frontal
+                if (waypoint.frontPhotoUrl.isNotEmpty()) {
+                    AsyncImage(
+                        model = waypoint.frontPhotoUrl,
+                        contentDescription = "Foto frontal del waypoint",
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(220.dp)
+                            .clip(RoundedCornerShape(topStart = 0.dp, topEnd = 12.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+            }
             
             // Información del waypoint
             Column(
@@ -558,6 +668,33 @@ fun WaypointCard(
                             color = Color.Gray
                         )
                     )
+                }
+                
+                // Etiquetas
+                if (waypoint.tags.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(waypoint.tags.size) { index ->
+                            AssistChip(
+                                onClick = { },
+                                label = {
+                                    Text(
+                                        waypoint.tags[index],
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontSize = 11.sp,
+                                            color = Color.Black
+                                        )
+                                    )
+                                },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = Color.Gray.copy(alpha = 0.1f),
+                                    labelColor = Color.Black
+                                )
+                            )
+                        }
+                    }
                 }
                 
                 // Botón de reproducir audio
@@ -639,14 +776,30 @@ fun WaypointGridItem(
         )
     ) {
         Box {
-            AsyncImage(
-                model = waypoint.photoUrl,
-                contentDescription = "Foto del waypoint",
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(12.dp)),
-                contentScale = ContentScale.Crop
-            )
+            Row(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                AsyncImage(
+                    model = waypoint.photoUrl,
+                    contentDescription = "Foto trasera del waypoint",
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp, topEnd = 0.dp, bottomEnd = 0.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                if (waypoint.frontPhotoUrl.isNotEmpty()) {
+                    AsyncImage(
+                        model = waypoint.frontPhotoUrl,
+                        contentDescription = "Foto frontal del waypoint",
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp, topEnd = 12.dp, bottomEnd = 12.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+            }
             // Overlay con información
             Column(
                 modifier = Modifier
@@ -676,6 +829,32 @@ fun WaypointGridItem(
                     ),
                     maxLines = 1
                 )
+                // Etiquetas
+                if (waypoint.tags.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(waypoint.tags.size) { index ->
+                            AssistChip(
+                                onClick = { },
+                                label = {
+                                    Text(
+                                        waypoint.tags[index],
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontSize = 10.sp,
+                                            color = Color.White
+                                        )
+                                    )
+                                },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = Color.White.copy(alpha = 0.2f),
+                                    labelColor = Color.White
+                                )
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -712,15 +891,32 @@ fun WaypointListItem(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Imagen pequeña
-            AsyncImage(
-                model = waypoint.photoUrl,
-                contentDescription = "Foto del waypoint",
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(8.dp)),
-                contentScale = ContentScale.Crop
-            )
+            // Imágenes pequeñas (trasera y frontal)
+            Row(
+                modifier = Modifier.size(64.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                AsyncImage(
+                    model = waypoint.photoUrl,
+                    contentDescription = "Foto trasera del waypoint",
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp, topEnd = 0.dp, bottomEnd = 0.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                if (waypoint.frontPhotoUrl.isNotEmpty()) {
+                    AsyncImage(
+                        model = waypoint.frontPhotoUrl,
+                        contentDescription = "Foto frontal del waypoint",
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp, topEnd = 8.dp, bottomEnd = 8.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+            }
             
             // Información
             Column(
@@ -770,6 +966,32 @@ fun WaypointListItem(
                         ),
                         maxLines = 1
                     )
+                }
+                // Etiquetas
+                if (waypoint.tags.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(waypoint.tags.size) { index ->
+                            AssistChip(
+                                onClick = { },
+                                label = {
+                                    Text(
+                                        waypoint.tags[index],
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontSize = 10.sp,
+                                            color = Color.Black
+                                        )
+                                    )
+                                },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = Color.Gray.copy(alpha = 0.1f),
+                                    labelColor = Color.Black
+                                )
+                            )
+                        }
+                    }
                 }
             }
         }

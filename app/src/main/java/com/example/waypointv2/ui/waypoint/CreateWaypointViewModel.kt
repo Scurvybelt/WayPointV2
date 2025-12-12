@@ -9,12 +9,16 @@ import com.example.waypointv2.data.WaypointRepository
 import com.example.waypointv2.ui.home.Waypoint
 import com.example.waypointv2.utils.AudioRecorder
 import com.example.waypointv2.utils.LocationHandler
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.io.File
 import java.util.Date
 
@@ -23,7 +27,8 @@ import java.util.Date
  */
 sealed class CaptureState {
     object Idle : CaptureState()
-    object CapturingPhoto : CaptureState()
+    object CapturingBackPhoto : CaptureState()
+    object CapturingFrontPhoto : CaptureState()
     object RecordingAudio : CaptureState()
     object ProcessingLocation : CaptureState()
     data class UploadingData(val progress: String) : CaptureState()
@@ -41,9 +46,12 @@ class CreateWaypointViewModel(application: Application) : AndroidViewModel(appli
     private val _captureState = MutableStateFlow<CaptureState>(CaptureState.Idle)
     val captureState = _captureState.asStateFlow()
     
-    // URI de la foto capturada
-    private val _photoUri = MutableStateFlow<Uri?>(null)
-    val photoUri = _photoUri.asStateFlow()
+    // URI de las fotos capturadas
+    private val _backPhotoUri = MutableStateFlow<Uri?>(null)
+    val backPhotoUri = _backPhotoUri.asStateFlow()
+    
+    private val _frontPhotoUri = MutableStateFlow<Uri?>(null)
+    val frontPhotoUri = _frontPhotoUri.asStateFlow()
     
     // Archivo de audio grabado
     private var audioFile: File? = null
@@ -56,6 +64,17 @@ class CreateWaypointViewModel(application: Application) : AndroidViewModel(appli
     private val _title = MutableStateFlow("")
     val title = _title.asStateFlow()
     
+    // Etiquetas del waypoint
+    private val _tags = MutableStateFlow<List<String>>(emptyList())
+    val tags = _tags.asStateFlow()
+    
+    // Etiquetas disponibles (de waypoints anteriores)
+    private val _availableTags = MutableStateFlow<List<String>>(emptyList())
+    val availableTags = _availableTags.asStateFlow()
+    
+    private val db = Firebase.firestore
+    private val auth = Firebase.auth
+    
     // Job para actualizar el contador de duración
     private var durationJob: Job? = null
     
@@ -67,14 +86,63 @@ class CreateWaypointViewModel(application: Application) : AndroidViewModel(appli
      * Inicia el flujo de captura (se llama cuando se abre la pantalla)
      */
     fun startCaptureFlow() {
-        _captureState.value = CaptureState.CapturingPhoto
+        _captureState.value = CaptureState.CapturingBackPhoto
+        loadAvailableTags()
     }
     
     /**
-     * Callback cuando se toma una foto
+     * Carga las etiquetas disponibles de los waypoints existentes del usuario
      */
-    fun onPhotoTaken(uri: Uri) {
-        _photoUri.value = uri
+    private fun loadAvailableTags() {
+        viewModelScope.launch {
+            try {
+                val userId = auth.currentUser?.uid
+                if (userId == null) {
+                    android.util.Log.d("CreateWaypointViewModel", "loadAvailableTags: No hay usuario")
+                    return@launch
+                }
+                
+                android.util.Log.d("CreateWaypointViewModel", "loadAvailableTags: Cargando etiquetas para userId: $userId")
+                
+                val snapshot = db.collection("waypoints")
+                    .whereEqualTo("userId", userId)
+                    .get()
+                    .await()
+                
+                android.util.Log.d("CreateWaypointViewModel", "loadAvailableTags: Encontrados ${snapshot.documents.size} waypoints")
+                
+                val allTags = snapshot.documents
+                    .mapNotNull { doc ->
+                        val waypoint = doc.toObject(Waypoint::class.java)
+                        android.util.Log.d("CreateWaypointViewModel", "loadAvailableTags: Waypoint ${doc.id} tiene tags: ${waypoint?.tags}")
+                        waypoint?.tags
+                    }
+                    .flatten()
+                    .distinct()
+                    .sorted()
+                
+                android.util.Log.d("CreateWaypointViewModel", "loadAvailableTags: Etiquetas únicas encontradas: $allTags")
+                _availableTags.value = allTags
+            } catch (e: Exception) {
+                android.util.Log.e("CreateWaypointViewModel", "loadAvailableTags: Error al cargar etiquetas", e)
+            }
+        }
+    }
+    
+    /**
+     * Callback cuando se toma la foto trasera
+     */
+    fun onBackPhotoTaken(uri: Uri) {
+        _backPhotoUri.value = uri
+        // Transición automática a foto frontal
+        _captureState.value = CaptureState.CapturingFrontPhoto
+    }
+    
+    /**
+     * Callback cuando se toma la foto frontal
+     */
+    fun onFrontPhotoTaken(uri: Uri) {
+        _frontPhotoUri.value = uri
         // Transición automática a grabación de audio
         _captureState.value = CaptureState.RecordingAudio
     }
@@ -123,6 +191,37 @@ class CreateWaypointViewModel(application: Application) : AndroidViewModel(appli
     }
     
     /**
+     * Agrega una etiqueta
+     */
+    fun addTag(tag: String) {
+        val trimmedTag = tag.trim()
+        android.util.Log.d("CreateWaypointViewModel", "addTag: Intentando agregar etiqueta: '$trimmedTag'")
+        if (trimmedTag.isNotEmpty()) {
+            // Verificar si ya existe (comparación case-insensitive)
+            val exists = _tags.value.any { it.equals(trimmedTag, ignoreCase = true) }
+            android.util.Log.d("CreateWaypointViewModel", "addTag: Etiqueta ya existe: $exists, etiquetas actuales: ${_tags.value}")
+            if (!exists) {
+                _tags.value = _tags.value + trimmedTag
+                android.util.Log.d("CreateWaypointViewModel", "addTag: Etiqueta agregada. Nuevas etiquetas: ${_tags.value}")
+            }
+        }
+    }
+    
+    /**
+     * Elimina una etiqueta
+     */
+    fun removeTag(tag: String) {
+        _tags.value = _tags.value.filter { it != tag }
+    }
+    
+    /**
+     * Actualiza todas las etiquetas
+     */
+    fun updateTags(newTags: List<String>) {
+        _tags.value = newTags
+    }
+    
+    /**
      * Inicia el contador de duración de grabación
      */
     private fun startDurationCounter() {
@@ -154,33 +253,57 @@ class CreateWaypointViewModel(application: Application) : AndroidViewModel(appli
                 val location = locationResult.getOrThrow()
                 val locationName = locationHandler.getLocationName(location.latitude, location.longitude)
                 
-                // Paso 2: Subir foto
-                _captureState.value = CaptureState.UploadingData("Subiendo foto...")
+                // Paso 2: Subir foto trasera
+                _captureState.value = CaptureState.UploadingData("Subiendo foto trasera...")
                 
-                val photoUri = _photoUri.value
-                if (photoUri == null) {
-                    _captureState.value = CaptureState.Error("No se encontró la foto")
+                val backPhotoUri = _backPhotoUri.value
+                if (backPhotoUri == null) {
+                    _captureState.value = CaptureState.Error("No se encontró la foto trasera")
                     return@launch
                 }
                 
-                val photoUrlResult = repository.uploadPhoto(photoUri)
-                if (photoUrlResult.isFailure) {
+                val backPhotoUrlResult = repository.uploadPhoto(backPhotoUri)
+                if (backPhotoUrlResult.isFailure) {
                     _captureState.value = CaptureState.Error(
-                        "Error al subir la foto: ${photoUrlResult.exceptionOrNull()?.message}"
+                        "Error al subir la foto trasera: ${backPhotoUrlResult.exceptionOrNull()?.message}"
                     )
                     return@launch
                 }
                 
-                val photoUrl = photoUrlResult.getOrThrow()
+                val backPhotoUrl = backPhotoUrlResult.getOrThrow()
                 
-                // Paso 3: Subir audio
+                // Paso 3: Subir foto frontal
+                _captureState.value = CaptureState.UploadingData("Subiendo foto frontal...")
+                
+                val frontPhotoUri = _frontPhotoUri.value
+                if (frontPhotoUri == null) {
+                    _captureState.value = CaptureState.Error("No se encontró la foto frontal")
+                    // Limpiar foto trasera subida
+                    repository.deleteUploadedFiles(backPhotoUrl, null)
+                    return@launch
+                }
+                
+                val frontPhotoUrlResult = repository.uploadPhoto(frontPhotoUri)
+                if (frontPhotoUrlResult.isFailure) {
+                    _captureState.value = CaptureState.Error(
+                        "Error al subir la foto frontal: ${frontPhotoUrlResult.exceptionOrNull()?.message}"
+                    )
+                    // Limpiar foto trasera subida
+                    repository.deleteUploadedFiles(backPhotoUrl, null)
+                    return@launch
+                }
+                
+                val frontPhotoUrl = frontPhotoUrlResult.getOrThrow()
+                
+                // Paso 4: Subir audio
                 _captureState.value = CaptureState.UploadingData("Subiendo audio...")
                 
                 val audioFileLocal = audioFile
                 if (audioFileLocal == null || !audioFileLocal.exists()) {
                     _captureState.value = CaptureState.Error("No se encontró el archivo de audio")
-                    // Limpiar foto subida
-                    repository.deleteUploadedFiles(photoUrl, null)
+                    // Limpiar fotos subidas
+                    repository.deleteUploadedFiles(backPhotoUrl, null)
+                    repository.deleteUploadedFiles(frontPhotoUrl, null)
                     return@launch
                 }
                 
@@ -189,24 +312,27 @@ class CreateWaypointViewModel(application: Application) : AndroidViewModel(appli
                     _captureState.value = CaptureState.Error(
                         "Error al subir el audio: ${audioUrlResult.exceptionOrNull()?.message}"
                     )
-                    // Limpiar foto subida
-                    repository.deleteUploadedFiles(photoUrl, null)
+                    // Limpiar fotos subidas
+                    repository.deleteUploadedFiles(backPhotoUrl, null)
+                    repository.deleteUploadedFiles(frontPhotoUrl, null)
                     return@launch
                 }
                 
                 val audioUrl = audioUrlResult.getOrThrow()
                 
-                // Paso 4: Guardar waypoint en Firestore
+                // Paso 5: Guardar waypoint en Firestore
                 _captureState.value = CaptureState.UploadingData("Guardando waypoint...")
                 
                 val waypoint = Waypoint(
                     userId = repository.getCurrentUserId(),
-                    photoUrl = photoUrl,
+                    photoUrl = backPhotoUrl,
+                    frontPhotoUrl = frontPhotoUrl,
                     audioUrl = audioUrl,
                     latitude = location.latitude,
                     longitude = location.longitude,
                     locationName = locationName,
                     title = _title.value,
+                    tags = _tags.value,
                     timestamp = Date()
                 )
                 
@@ -216,7 +342,9 @@ class CreateWaypointViewModel(application: Application) : AndroidViewModel(appli
                         "Error al guardar el waypoint: ${saveResult.exceptionOrNull()?.message}"
                     )
                     // Limpiar archivos subidos
-                    repository.deleteUploadedFiles(photoUrl, audioUrl)
+                    repository.deleteUploadedFiles(backPhotoUrl, null)
+                    repository.deleteUploadedFiles(frontPhotoUrl, null)
+                    repository.deleteUploadedFiles(null, audioUrl)
                     return@launch
                 }
                 
@@ -238,7 +366,7 @@ class CreateWaypointViewModel(application: Application) : AndroidViewModel(appli
      * Reintenta la subida después de un error
      */
     fun retryUpload() {
-        if (_photoUri.value != null && audioFile != null) {
+        if (_backPhotoUri.value != null && _frontPhotoUri.value != null && audioFile != null) {
             processLocationAndUpload()
         } else {
             _captureState.value = CaptureState.Error("No hay datos para reintentar")
@@ -253,9 +381,11 @@ class CreateWaypointViewModel(application: Application) : AndroidViewModel(appli
         audioRecorder.cancelRecording()
         cleanupLocalFiles()
         _captureState.value = CaptureState.Idle
-        _photoUri.value = null
+        _backPhotoUri.value = null
+        _frontPhotoUri.value = null
         _recordingDuration.value = 0
         _title.value = ""
+        _tags.value = emptyList()
         audioFile = null
     }
     
